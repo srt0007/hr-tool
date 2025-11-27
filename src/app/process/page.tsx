@@ -41,23 +41,22 @@ export default function ProcessPage() {
     try {
       const result = await screeningAPI.processResumes(
         jobDescription,
-        folderId,
-        (progressData) => {
-          setProgress({
-            current: progressData.current || 0,
-            total: progressData.total || 0,
-            fileName: progressData.fileName || '',
-          });
-        }
+        folderId
       );
 
       if (result.success) {
         setResults(result.results);
+        setProgress({
+          current: result.totalProcessed || 0,
+          total: result.totalProcessed || 0,
+          fileName: 'Complete',
+        });
       } else {
         setError(result.error || 'Processing failed');
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred during processing');
+      console.error('Processing error:', err);
+      setError(err.response?.data?.error || err.message || 'An error occurred during processing');
     } finally {
       setIsProcessing(false);
     }

@@ -117,43 +117,12 @@ export const screeningAPI = {
     folderId: string,
     onProgress?: (progress: any) => void
   ): Promise<ScreeningResult> => {
-    if (onProgress) {
-      // Use Server-Sent Events for progress updates
-      return new Promise((resolve, reject) => {
-        const sessionId = localStorage.getItem('sessionId');
-        const eventSource = new EventSource(
-          `${API_URL}/api/screening/process?jobDescription=${encodeURIComponent(
-            jobDescription
-          )}&folderId=${encodeURIComponent(folderId)}&sessionId=${sessionId}`
-        );
-
-        eventSource.onmessage = (event) => {
-          const data = JSON.parse(event.data);
-
-          if (data.type === 'complete') {
-            eventSource.close();
-            resolve(data);
-          } else if (data.type === 'error') {
-            eventSource.close();
-            reject(new Error(data.error));
-          } else {
-            onProgress(data);
-          }
-        };
-
-        eventSource.onerror = (error) => {
-          eventSource.close();
-          reject(error);
-        };
-      });
-    } else {
-      // Regular POST request without SSE
-      const response = await api.post('/api/screening/process', {
-        jobDescription,
-        folderId,
-      });
-      return response.data;
-    }
+    // Use regular POST request (SSE removed for simplicity)
+    const response = await api.post('/api/screening/process', {
+      jobDescription,
+      folderId,
+    });
+    return response.data;
   },
 
   analyzeSingleResume: async (
