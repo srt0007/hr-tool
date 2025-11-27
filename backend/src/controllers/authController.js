@@ -1,11 +1,12 @@
+const jwt = require('jsonwebtoken');
 const {
   getAuthUrl,
   getTokensFromCode,
   setCredentials,
 } = require('../config/googleDrive');
 
-// In-memory token storage (in production, use a database or secure session storage)
-const tokenStore = new Map();
+// JWT secret from environment variable
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 /**
  * Get Google OAuth URL
@@ -42,18 +43,19 @@ async function handleOAuthCallback(req, res) {
     // Exchange code for tokens
     const tokens = await getTokensFromCode(code);
 
-    // Generate session ID
-    const sessionId = Math.random().toString(36).substring(7);
-
-    // Store tokens (in production, use secure session storage)
-    tokenStore.set(sessionId, tokens);
+    // Create JWT token containing the OAuth credentials (expires in 7 days)
+    const sessionToken = jwt.sign(
+      { tokens },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
 
     // Set credentials
     setCredentials(tokens);
 
-    // Redirect back to frontend with session ID
+    // Redirect back to frontend with JWT session token
     const frontendUrl = process.env.ALLOWED_ORIGINS?.split(',')[0] || 'http://localhost:3000';
-    res.redirect(`${frontendUrl}/auth/callback?session=${sessionId}`);
+    res.redirect(`${frontendUrl}/auth/callback?session=${sessionToken}`);
   } catch (error) {
     console.error('OAuth callback error:', error);
     res.status(500).json({
@@ -67,40 +69,45 @@ async function handleOAuthCallback(req, res) {
  * Verify session and set credentials
  */
 function verifySession(req, res, next) {
-  const sessionId = req.headers['x-session-id'];
+  const sessionToken = req.headers['x-session-id'];
 
-  if (!sessionId) {
+  if (!sessionToken) {
     return res.status(401).json({
       success: false,
-      error: 'Session ID is required',
+      error: 'Session token is required',
     });
   }
 
-  const tokens = tokenStore.get(sessionId);
+  try {
+    // Verify and decode JWT token
+    const decoded = jwt.verify(sessionToken, JWT_SECRET);
+    const tokens = decoded.tokens;
 
-  if (!tokens) {
+    if (!tokens) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid session token',
+      });
+    }
+
+    // Set credentials for this request
+    setCredentials(tokens);
+
+    next();
+  } catch (error) {
     return res.status(401).json({
       success: false,
       error: 'Invalid or expired session',
     });
   }
-
-  // Set credentials for this request
-  setCredentials(tokens);
-
-  next();
 }
 
 /**
- * Logout - clear session
+ * Logout - clear session (client-side)
  */
 function logout(req, res) {
-  const sessionId = req.headers['x-session-id'];
-
-  if (sessionId) {
-    tokenStore.delete(sessionId);
-  }
-
+  // With JWT, logout is handled client-side by removing the token
+  // No server-side cleanup needed
   res.json({
     success: true,
     message: 'Logged out successfully',
@@ -111,19 +118,28 @@ function logout(req, res) {
  * Check authentication status
  */
 function checkAuthStatus(req, res) {
-  const sessionId = req.headers['x-session-id'];
+  const sessionToken = req.headers['x-session-id'];
 
-  if (!sessionId || !tokenStore.has(sessionId)) {
+  if (!sessionToken) {
     return res.json({
       success: true,
       authenticated: false,
     });
   }
 
-  res.json({
-    success: true,
-    authenticated: true,
-  });
+  try {
+    // Verify JWT token
+    jwt.verify(sessionToken, JWT_SECRET);
+    res.json({
+      success: true,
+      authenticated: true,
+    });
+  } catch (error) {
+    res.json({
+      success: true,
+      authenticated: false,
+    });
+  }
 }
 
 module.exports = {
