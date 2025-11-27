@@ -1,3 +1,4 @@
+// Load .env.local for local development (optional, won't exist in production)
 require('dotenv').config({ path: '.env.local' });
 
 module.exports = {
